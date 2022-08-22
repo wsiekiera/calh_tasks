@@ -1,5 +1,16 @@
+# Aby zaliczyć zadanie:
+# - użyj wzorca Adapter do konwersji json->http_call->xml->json
+# - użyj wzorca Builder aby przygotować zapytanie w json i odpowiedź w json (klasy JsonRequestBuilder, JsonResponseBuilder)
+# - zapisz zapytania w json (wygenerowane na podstawie danych z input_data.txt) do pliku json_requests.txt
+# - zapisz odpowiedzi serwisu w json (po konwersji adapterem!) do pliku json_responses.txt
+# - zapytania i odpowiedzi wygeneruj za pomocą wcześniej przygotowanych builderów
+
+
+
 import json
+import requests
 import xml.etree.ElementTree as ET
+from bs4 import BeautifulSoup as bs
 from abc import ABC, abstractmethod
 
 import requests
@@ -39,20 +50,20 @@ class XMLWebServiceInvoker:
     def __init__(self):
         pass
 
-    def request(self, cunbr):
+    def request(self, cunbr) -> str:
         # Make request to xml webservice with cunbr number
         # returns xml webservice response as string
         # IMPLEMENT ME PLZ!
-        raise NotImplementedError
+        res = requests.get(f'https://coding-academy.pl/customer/{cunbr}')
+        return res.text
 
 
 class Adapter(Target):
-    def __init__(self, adaptee):
+    def __init__(self, adaptee: XMLWebServiceInvoker):
         super().__init__()
         self.adaptee = adaptee
 
-    def request(self, json_request):
-        # IMPLEMENT ME PLZ!
+    def request(self, json_request) -> str:
         # json_request - request w formacie json zgodny z formatem:
         # {
         #     "customer_request": {
@@ -62,7 +73,7 @@ class Adapter(Target):
         #     }
         # }
         #
-        # Wyłuskaj numer cunbr z requersta i wykonaj zapytanie do serwisu
+        # Wyłuskaj numer cunbr z requesta i wykonaj zapytanie do serwisu
         # Pozyskany XML prezkonwertuj na json
         # Pamiętaj o użyciu buildera do stworzenia json response.
         # Zwróc json_response w formie stringa zgodny z formatem:
@@ -74,7 +85,15 @@ class Adapter(Target):
         #     }
         #   }
         # }
-        raise NotImplementedError
+        customer_request = json.loads(json_request)
+        cunbr = customer_request['customer_request']['customer']['cunbr']
+        response_ = self.adaptee.request(cunbr)
+        bs_content = bs(response_, features='lxml')
+        accounts = [account.text for account in bs_content.findAll('account')]
+        return (JsonResponseBuilder()
+                .with_cunbr(cunbr)
+                .with_accounts(accounts)
+                .build())
 
 
 class AbstractJsonBuilder(ABC):
@@ -86,36 +105,57 @@ class AbstractJsonBuilder(ABC):
     def with_cunbr(self, cunbr):
         pass
 
+
+    @abstractmethod
     def build(self):
+        pass
         # IMPLEMENT ME PLZ!
-        raise NotImplementedError
-
-
-class JsonResponseBuilder(AbstractJsonBuilder):
-    def __init__(self):
-        # IMPLEMENT ME PLZ!
-        raise NotImplementedError
-
-    def with_cunbr(self, cunbr):
-        # IMPLEMENT ME PLZ!
-        raise NotImplementedError
-
-    def with_accounts(self, accounts):
-        # IMPLEMENT ME PLZ!
-        raise NotImplementedError
+        #raise NotImplementedError
 
 
 class JsonRequestBuilder(AbstractJsonBuilder):
     def __init__(self):
-        # IMPLEMENT ME PLZ!
-        raise NotImplementedError
+        self.json_request = {
+            "customer_request": {
+                "customer": {
+                    "cunbr": None
+                }
+            }
+        }
 
     def with_cunbr(self, cunbr):
-        # IMPLEMENT ME PLZ!
-        raise NotImplementedError
+        self.json_request['customer_request']['customer']['cunbr'] = cunbr
+        return self
+
+    def build(self):
+        # return self.json_request
+        return json.dumps(self.json_request)
 
 
-def client_code(service, payload):
+class JsonResponseBuilder(AbstractJsonBuilder):
+    def __init__(self):
+        self.json_response = {
+            "customer_response": {
+                "customer": {
+                    "cunbr": None,
+                    "accounts": None
+                }
+            }
+        }
+
+    def with_cunbr(self, cunbr):
+        self.json_response['customer_response']['customer']['cunbr'] = cunbr
+        return self
+
+    def with_accounts(self, accounts):
+        self.json_response['customer_response']['customer']['accounts'] = accounts
+        return self
+
+    def build(self):
+        return json.dumps(self.json_response)
+
+
+def client_code(service: Adapter, payload) -> str:
     return service.request(payload)
 
 
